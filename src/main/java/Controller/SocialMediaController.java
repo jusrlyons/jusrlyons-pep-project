@@ -57,7 +57,7 @@ public class SocialMediaController {
     // Get account by ID
     private void getAccountById(Context context) {
         int accountId = Integer.parseInt(context.pathParam("id"));
-        Account account = accountService.getAccountById(accountId);
+        Account account = accountService.getAccountById(accountId).get();
         if (account != null) {
             context.status(200).json(account); // Return account details
         } else {
