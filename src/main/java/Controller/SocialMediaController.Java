@@ -4,8 +4,8 @@ import Model.Account;
 import Model.Message;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
-import testService.AccountService;
-import testService.MessageService;
+import Service.AccountService;
+import Service.MessageService;
 
 public class SocialMediaController {
 
