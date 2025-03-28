@@ -145,7 +145,7 @@ public class AccountService {
     public boolean updateAccount(Account account) {
         LOGGER.info("Updating account: {}", account);
         try {
-            account.setPassword(account.password);
+            account.setPassword(account.getPassword());
             boolean updated = accountDao.update(account);
             LOGGER.info("Updated account: {}. Update successful {}", account, updated);
             return updated;
@@ -163,7 +163,7 @@ public class AccountService {
      */
     public boolean deleteAccount(Account account) {
         LOGGER.info("Deleting account: {}", account);
-        if (account.getAccount_id() == 0) {
+        if (account.getAccount_id() <= 0) {
             throw new IllegalArgumentException("Account ID cannot be null");
         }
         try {
@@ -186,8 +186,8 @@ public class AccountService {
         LOGGER.info("Validating account: {}", account);
         try {
 
-            String username = account.getUsername().trim();
-            String password = account.getPassword().trim();
+            String username = account.getUsername() != null ? account.getUsername().trim() : "";
+            String password = account.getPassword() != null ? account.getPassword().trim() : "";
 
             if (username.isEmpty()) {
                 throw new ServiceException("Username cannot be blank");
