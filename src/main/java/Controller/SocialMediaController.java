@@ -1,143 +1,271 @@
 package Controller;
 
+import java.util.List;
+import java.util.Optional;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import Model.Account;
 import Model.Message;
 import Service.AccountService;
 import Service.MessageService;
+import Service.ServiceException;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 
 public class SocialMediaController {
 
+    // Instances for handling account-related and message-related operations
     private final AccountService accountService;
     private final MessageService messageService;
 
     public SocialMediaController() {
-        this.accountService = new AccountService(); // Instantiate AccountService
-        this.messageService = new MessageService(); // Instantiate MessageService
+        // Initialize the accountService and messageService instances
+        this.accountService = new AccountService();
+        this.messageService = new MessageService();
     }
 
     /**
-     * This method defines the API endpoints and handlers.
-     * @return a Javalin app object which defines the behavior of the Javalin controller.
+     * This method initializes the social media application with Javalin, creating
+     * necessary endpoints. It returns the initialized Javalin instance.
+     *
+     * @return an instance of Javalin with predefined endpoints.
      */
     public Javalin startAPI() {
         Javalin app = Javalin.create();
-
-        // Account Endpoints
-        app.post("/accounts", this::createAccount);   // Create a new account
-        app.get("/accounts/{id}", this::getAccountById); // Get account by ID
-        app.get("/accounts", this::getAllAccounts);    // Get all accounts
-        app.put("/accounts/{id}", this::updateAccount); // Update account
-        app.delete("/accounts/{id}", this::deleteAccount); // Delete account
-
-        // Message Endpoints
-        app.post("/messages", this::createMessage);    // Create a new message
-        app.get("/messages/{id}", this::getMessageById); // Get message by ID
-        app.get("/messages", this::getAllMessages);    // Get all messages
-        app.get("/messages/user/{userId}", this::getMessagesByUserId); // Get messages by user ID
-        app.delete("/messages/{id}", this::deleteMessage); // Delete message
+        app.post("/register", this::registerAccount);
+        app.post("/login", this::loginAccount);
+        app.post("/messages", this::createMessage);
+        app.get("/messages", this::getAllMessages);
+        app.get("/messages/{message_id}", this::getMessageById);
+        app.delete("/messages/{message_id}", this::deleteMessageById);
+        app.patch("/messages/{message_id}", this::updateMessageById);
+        app.get("/accounts/{account_id}/messages",
+                this::getMessagesByAccountId);
 
         return app;
+
     }
 
-    // Account Handlers
+    /**
+     * This method handles the registration process for new users.
+     * It expects a POST request to "/register" with the new account details in the
+     * request body.
+     *
+     * @param ctx the Javalin context object representing the current HTTP request
+     *            and response
+     * @throws JsonProcessingException if an error occurs during JSON parsing or
+     *                                 serialization
+     */
+    private void registerAccount(Context ctx) throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Account account = mapper.readValue(ctx.body(), Account.class);
+        try {
+            Account registeredAccount = accountService.createAccount(account);
 
-    // Create an account
-    private void createAccount(Context context) {
-        Account account = context.bodyAsClass(Account.class);
-        Account createdAccount = accountService.createAccount(account);
-        if (createdAccount != null) {
-            context.status(201).json(createdAccount); // Respond with created account and status 201
-        } else {
-            context.status(400).json("Error creating account"); // Error if creation fails
+            // Send the registered account as a JSON response
+            ctx.json(mapper.writeValueAsString(registeredAccount));
+        } catch (ServiceException e) {
+            // Set the response status to 400 (Bad Request) in case of exception
+            ctx.status(400);
         }
     }
 
-    // Get account by ID
-    private void getAccountById(Context context) {
-        int accountId = Integer.parseInt(context.pathParam("id"));
-        Account account = accountService.getAccountById(accountId);
-        if (account != null) {
-            context.status(200).json(account); // Return account details
-        } else {
-            context.status(404).json("Account not found"); // Return error if not found
+    /**
+     * This method handles the login process for users.
+     * It expects a POST request to "/login" with the account credentials in the
+     * request body.
+     *
+     * @param ctx the Javalin context object representing the current HTTP request
+     *            and response
+     * @throws JsonProcessingException if an error occurs during JSON parsing or
+     *                                 serialization
+     */
+    private void loginAccount(Context ctx) throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper(); // it calls a default no-arg constructor from Model.Account - REQUIRED
+                                                  // for Jackson ObjectMapper
+        Account account = mapper.readValue(ctx.body(), Account.class);
+
+        try {
+            Optional<Account> loggedInAccount = accountService
+                    .validateLogin(account);
+            if (loggedInAccount.isPresent()) {
+                // Send the logged-in account as a JSON response
+                ctx.json(mapper.writeValueAsString(loggedInAccount));
+                ctx.sessionAttribute("logged_in_account",
+                        loggedInAccount.get());
+                ctx.json(loggedInAccount.get());
+            } else {
+                // Set the response status to 401 (Unauthorized) if the account is not found
+                ctx.status(401);
+            }
+        } catch (ServiceException e) {
+            // Set the response status to 401 (Unauthorized) in case of exception
+            ctx.status(401);
         }
     }
 
-    // Get all accounts
-    private void getAllAccounts(Context context) {
-        context.status(200).json(accountService.getAllAccounts()); // Return all accounts
-    }
-
-    // Update an account
-    private void updateAccount(Context context) {
-        int accountId = Integer.parseInt(context.pathParam("id"));
-        Account account = context.bodyAsClass(Account.class);
-        account.setAccount_id(accountId); // Set account ID from path param
-        Account updatedAccount = accountService.updateAccount(account);
-        if (updatedAccount != null) {
-            context.status(200).json(updatedAccount); // Return updated account
-        } else {
-            context.status(400).json("Error updating account"); // Error if update fails
+    /**
+     * This method handles the creation of new messages.
+     * It expects a POST request to "/messages" with the message details in the
+     * request body.
+     *
+     * @param ctx the Javalin context object representing the current HTTP request
+     *            and response
+     * @throws JsonProcessingException if an error occurs during JSON parsing or
+     *                                 serialization
+     */
+    private void createMessage(Context ctx) throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Message mappedMessage = mapper.readValue(ctx.body(), Message.class);
+        try {
+            Optional<Account> account = accountService
+                    .getAccountById(mappedMessage.getPosted_by());
+            Message message = messageService.createMessage(mappedMessage,
+                    account);
+            ctx.json(message);
+        } catch (ServiceException e) {
+            // Set the response status to 400 (Bad Request) in case of exception
+            ctx.status(400);
         }
     }
 
-    // Delete an account
-    private void deleteAccount(Context context) {
-        int accountId = Integer.parseInt(context.pathParam("id"));
-        boolean deleted = accountService.deleteAccount(accountId);
-        if (deleted) {
-            context.status(204); // Return status 204 for successful deletion
-        } else {
-            context.status(404).json("Account not found"); // Error if account not found
+    /**
+     * This method retrieves all messages.
+     * It expects a GET request to "/messages".
+     *
+     * @param ctx the Javalin context object representing the current HTTP request
+     *            and response
+     */
+    private void getAllMessages(Context ctx) {
+
+        List<Message> messages = messageService.getAllMessages();
+        ctx.json(messages);
+    }
+
+    /**
+     * This method handles the retrieval of a specific message by its ID.
+     * It expects a GET request to "/messages/{message_id}".
+     *
+     * @param ctx the Javalin context object representing the current HTTP request
+     *            and response
+     */
+
+    private void getMessageById(Context ctx) {
+        try {
+            int id = Integer.parseInt(ctx.pathParam("message_id"));
+            Optional<Message> message = messageService.getMessageById(id);
+            if (message.isPresent()) {
+                ctx.json(message.get());
+            } else {
+                // If the message is not found, set the response status to 200 (OK)
+                ctx.status(200); // As per test expectations, return a 200 status even if the message is not
+                                 // found.
+                ctx.result(""); // Response body is empty as the message was not found.
+            }
+            // Catch block for NumberFormatException is required to handle cases where the
+            // 'message_id' path parameter cannot be parsed to an integer. Without this, an
+            // invalid 'message_id' could lead to unhandled exceptions and potential
+            // application crashes.
+        } catch (NumberFormatException e) {
+            ctx.status(400); // Respond with a 'Bad Request' status for invalid 'message_id'.
+        } catch (ServiceException e) {
+            ctx.status(200); // Respond with a '200' status even in case of a service error.
+            ctx.result(""); // Response body is empty as there was a service error.
         }
     }
 
-    // Message Handlers
+    /**
+     * This method handles the deletion of a specific message by its ID.
+     * It expects a DELETE request to "/messages/{message_id}".
+     *
+     * @param ctx the Javalin context object representing the current HTTP request
+     *            and response
+     */
+    private void deleteMessageById(Context ctx) {
+        try {
+            // Retrieve the message ID from the path parameter
+            int id = Integer.parseInt(ctx.pathParam("message_id"));
 
-    // Create a new message
-    private void createMessage(Context context) {
-        Message message = context.bodyAsClass(Message.class);
-        Message createdMessage = messageService.createMessage(message);
-        if (createdMessage != null) {
-            context.status(201).json(createdMessage); // Respond with created message and status 201
-        } else {
-            context.status(400).json("Error creating message"); // Error if creation fails
+            // Attempt to retrieve the message by its ID
+            Optional<Message> message = messageService.getMessageById(id);
+            if (message.isPresent()) {
+                // The message exists, so delete it
+                messageService.deleteMessage(message.get());
+                ctx.status(200);
+                // Include the deleted message in the response body
+                ctx.json(message.get());
+            } else {
+                // The message does not exist
+                // Set the response status to 200 (OK) to indicate successful deletion
+                ctx.status(200);
+            }
+        } catch (ServiceException e) {
+            // An exception occurred during the deletion process
+            // Set the response status to 200 (OK) to handle the exception gracefully
+            ctx.status(200);
         }
     }
 
-    // Get a message by ID
-    private void getMessageById(Context context) {
-        int messageId = Integer.parseInt(context.pathParam("id"));
-        Message message = messageService.getMessageById(messageId);
-        if (message != null) {
-            context.status(200).json(message); // Return message details
-        } else {
-            context.status(404).json("Message not found"); // Return error if not found
+    /**
+     * This method handles the update of a specific message by its ID.
+     * It expects a PATCH request to "/messages/{message_id}" with the new content
+     * of the message in the request body.
+     *
+     * @param ctx the Javalin context object representing the current HTTP request
+     *            and response
+     * @throws JsonProcessingException if an error occurs during JSON parsing or
+     *                                 serialization
+     */
+    private void updateMessageById(Context ctx) throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Message mappedMessage = mapper.readValue(ctx.body(), Message.class);
+        try {
+            int id = Integer.parseInt(ctx.pathParam("message_id"));
+            mappedMessage.setMessage_id(id);
+
+            // Update the message with the new content
+            Message messageUpdated = messageService
+                    .updateMessage(mappedMessage);
+
+            // Set the response status to 200 (OK) and include the updated message in the
+            // response body
+            ctx.json(messageUpdated);
+
+        } catch (ServiceException e) {
+            // An exception occurred during the update process
+            // Set the response status to 400 (Bad Request) to indicate a failure in the
+            // request
+            ctx.status(400);
         }
     }
 
-    // Get all messages
-    private void getAllMessages(Context context) {
-        context.status(200).json(messageService.getAllMessages()); // Return all messages
-    }
+    /**
+     * This method retrieves all messages associated with a specific account ID.
+     * It expects a GET request to "/accounts/{account_id}/messages".
+     *
+     * @param ctx the Javalin context object representing the current HTTP request
+     *            and response
+     */
+    private void getMessagesByAccountId(Context ctx) {
+        try {
+            int accountId = Integer.parseInt(ctx.pathParam("account_id"));
 
-    // Get messages by user ID
-    private void getMessagesByUserId(Context context) {
-        int userId = Integer.parseInt(context.pathParam("userId"));
-        context.status(200).json(messageService.getMessagesByUserId(userId)); // Return messages by user
-    }
-
-    // Delete a message
-    private void deleteMessage(Context context) {
-        int messageId = Integer.parseInt(context.pathParam("id"));
-        boolean deleted = messageService.deleteMessage(messageId);
-        if (deleted) {
-            context.status(204); // Return status 204 for successful deletion
-        } else {
-            context.status(404).json("Message not found"); // Error if message not found
+            // Call the messageService to retrieve messages by account ID
+            List<Message> messages = messageService
+                    .getMessagesByAccountId(accountId);
+            if (!messages.isEmpty()) {
+                // If messages are found, send them as a JSON response
+                ctx.json(messages);
+            } else {
+                // If no messages are found, send an empty JSON response
+                ctx.json(messages);
+                ctx.status(200);
+            }
+        } catch (ServiceException e) {
+            // Handle ServiceException and set the status code to 400 (Bad Request)
+            ctx.status(400);
         }
     }
-
 }
