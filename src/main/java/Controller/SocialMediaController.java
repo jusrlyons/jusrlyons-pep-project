@@ -1,128 +1,135 @@
 package Controller;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import Model.Account;
 import Model.Message;
 import Service.AccountService;
 import Service.MessageService;
+
+import java.util.List;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 
+
 public class SocialMediaController {
-
-    private final AccountService accountService;
-    private final MessageService messageService;
-
-    public SocialMediaController() {
-        this.accountService = new AccountService(); // Instantiate AccountService
-        this.messageService = new MessageService(); // Instantiate MessageService
+    AccountService accountService;
+    MessageService messageService;
+    public SocialMediaController(){
+        this.accountService = new AccountService();
+        this.messageService = new MessageService();
     }
-
+    /**
+     * In order for the test cases to work, you will need to write the endpoints in the startAPI() method, as the test
+     * suite must receive a Javalin object from this method.
+     * @return a Javalin app object which defines the behavior of the Javalin controller.
+     */
+    
     public Javalin startAPI() {
         Javalin app = Javalin.create();
-
-        // Account Endpoints
-        app.post("/accounts", this::createAccount);
-        app.get("/accounts/{id}", this::getAccountById);
-        app.get("/accounts", this::getAllAccounts);
-        app.put("/accounts/{id}", this::updateAccount);
-        app.delete("/accounts/{id}", this::deleteAccount);
-
-        // Message Endpoints
-        app.post("/messages", this::createMessage);
-        app.get("/messages/{id}", this::getMessageById);
-        app.get("/messages", this::getAllMessages);
-        app.get("/messages/user/{userId}", this::getMessagesByUserId);
-        app.delete("/messages/{id}", this::deleteMessage);
-
+        app.post("/register", this::postUserRegisterHandler);
+        app.post("/login", this::postUserLoginHandler);
+        app.get("/messages", this::getMessageHandler);
+        app.post("/messages", this::postMessageHandler);
+        app.get("/messages/{message_id}", this::getMessagebyIDHandler);
+        app.delete("/messages/{message_id}", this::deleteMessagebyIDHandler);
+        app.patch("/messages/{message_id}", this::updateMessagebyIDHandler);
+        app.get("/accounts/{account_id}/messages", this::getMessagefromUserHandler);
         return app;
     }
 
-    // Account Handlers
-    private void createAccount(Context context) {
-        Account account = context.bodyAsClass(Account.class);
-        Account createdAccount = accountService.createAccount(account.getUsername(), account.getPassword());
-        if (createdAccount != null) {
-            context.status(201).json(createdAccount);
-        } else {
-            context.status(400).json("Error creating account");
+    private void postUserRegisterHandler(Context context) throws JsonMappingException, JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Account account = mapper.readValue(context.body(), Account.class);
+        Account addedAccount = accountService.addAccount(account);
+        if(addedAccount!=null){
+            context.status(200);
+            context.json(mapper.writeValueAsString(addedAccount));
+                       
+        }else{
+            context.status(400);
         }
     }
-
-    private void getAccountById(Context context) {
-        int accountId = Integer.parseInt(context.pathParam("id"));
-        Account account = accountService.getAccountById(accountId);
-        if (account != null) {
-            context.status(200).json(account);
-        } else {
-            context.status(404).json("Account not found");
+    private void postUserLoginHandler(Context context) throws JsonMappingException, JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Account account = mapper.readValue(context.body(), Account.class);
+        Account foundAccount = accountService.findAccount(account);
+        if(foundAccount!=null){
+            context.status(200);
+            context.json(mapper.writeValueAsString(foundAccount));
+                       
+        }else{
+            context.status(401);
         }
     }
-
-    private void getAllAccounts(Context context) {
-        context.status(200).json(accountService.getAllAccounts());
+    private void getMessageHandler(Context context) {
+        List<Message> messages = messageService.getAllMessages();
+        context.json(messages);
+        context.status(200);
     }
-
-    private void updateAccount(Context context) {
-        int accountId = Integer.parseInt(context.pathParam("id"));
-        Account account = context.bodyAsClass(Account.class);
-        Account updatedAccount = accountService.updateAccount(accountId, account.getUsername(), account.getPassword());
-        if (updatedAccount != null) {
-            context.status(200).json(updatedAccount);
-        } else {
-            context.status(400).json("Error updating account");
+    private void getMessagebyIDHandler(Context context) throws JsonMappingException, JsonProcessingException {
+        Message foundMessage = messageService.getMessagebyID(Integer.parseInt(context.pathParam("message_id")));
+        if(foundMessage != null)
+        {
+            context.json(foundMessage);
+        }
+        else
+        {
+            context.json("");
+        }
+        context.status(200);
+    }
+    private void postMessageHandler(Context context) throws JsonMappingException, JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Message message = mapper.readValue(context.body(), Message.class);
+        Message addedMessage = messageService.addMessage(message);
+        if(addedMessage!=null){
+            context.status(200);
+            context.json(mapper.writeValueAsString(addedMessage));
+                       
+        }else{
+            context.status(400);
         }
     }
-
-    private void deleteAccount(Context context) {
-        int accountId = Integer.parseInt(context.pathParam("id"));
-        boolean deleted = accountService.deleteAccount(accountId);
-        if (deleted) {
-            context.status(204);
-        } else {
-            context.status(404).json("Account not found");
+    private void deleteMessagebyIDHandler(Context context) throws JsonMappingException, JsonProcessingException {
+        Message foundMessage = messageService.deleteMessagebyID(Integer.parseInt(context.pathParam("message_id")));
+        if(foundMessage != null)
+        {
+            context.json(foundMessage);
         }
-    }
-
-    // Message Handlers
-    private void createMessage(Context context) {
-        Message message = context.bodyAsClass(Message.class);
-        Message createdMessage = messageService.createMessage(message.getPosted_by(), message.getMessage_text(), message.getTime_posted_epoch());
-        if (createdMessage != null) {
-            context.status(201).json(createdMessage);
-        } else {
-            context.status(400).json("Error creating message");
+        else
+        {
+            context.json("");
         }
+        context.status(200);
     }
-
-    private void getMessageById(Context context) {
-        int userId = Integer.parseInt(context.pathParam("userId"));
-        List<Message> messages = messageService.getMessagesByUserId(userId);
-        if (messages.isEmpty()) {
-            context.status(200).json(new ArrayList<>());  // Return empty array if no messages
-        } else {
-        context.status(200).json(messages);  // Return the messages
+    private void updateMessagebyIDHandler(Context context) throws JsonMappingException, JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+        Message message_text = mapper.readValue(context.body(), Message.class);
+        Message foundMessage = messageService.updateMessagebyID(Integer.parseInt(context.pathParam("message_id")), message_text.getMessage_text());
+        if(foundMessage != null)
+        {
+            context.json(foundMessage);
+            context.status(200);
         }
-    }
-
-    private void getAllMessages(Context context) {
-        context.status(200).json(messageService.getAllMessages());
-    }
-
-    private void getMessagesByUserId(Context context) {
-        int userId = Integer.parseInt(context.pathParam("userId"));
-        context.status(200).json(messageService.getMessagesByUserId(userId));
-    }
-
-    private void deleteMessage(Context context) {
-        int messageId = Integer.parseInt(context.pathParam("id"));
-        boolean deleted = messageService.deleteMessage(messageId);
-        if (deleted) {
-            context.status(204);
-        } else {
-            context.status(404).json("Message not found");
+        else
+        {
+            context.status(400);
         }
+        
+    }
+    private void getMessagefromUserHandler(Context context) throws JsonMappingException, JsonProcessingException {
+        List<Message> foundMessage = messageService.getMessagebyUserID(Integer.parseInt(context.pathParam("account_id")));
+        if(foundMessage != null)
+        {
+            context.json(foundMessage);
+        }
+        else
+        {
+            context.json("");
+        }
+        context.status(200);
     }
 }

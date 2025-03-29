@@ -1,42 +1,94 @@
 package Service;
 
+import Model.Account;
 import Model.Message;
 import DAO.MessageDAO;
-
+import DAO.AccountDAO;
 import java.util.List;
-
 public class MessageService {
-
-    private MessageDAO messageDAO;
-
-    public MessageService() {
-        this.messageDAO = new MessageDAO(); // Assuming MessageDAO handles DB interactions
+    public MessageDAO messageDAO;
+    public AccountDAO accountDAO;
+    public MessageService()
+    {
+        this.messageDAO = new MessageDAO();
+        this.accountDAO = new AccountDAO();
     }
-
-    // Create a new message
-    public Message createMessage(int postedBy, String messageText, long timePostedEpoch) {
-        // You can add business logic to validate or manipulate message data before saving
-        Message newMessage = new Message(postedBy, messageText, timePostedEpoch);
-        return messageDAO.createMessage(newMessage);
+    public MessageService(MessageDAO messageDAO)
+    {
+        this.messageDAO = messageDAO;
+        this.accountDAO = new AccountDAO();
     }
-
-    // Get message by ID
-    public Message getMessageById(int messageId) {
-        return messageDAO.getMessageById(messageId);
+    public MessageService(MessageDAO messageDAO, AccountDAO accountDAO)
+    {
+        this.messageDAO = messageDAO;
+        this.accountDAO = accountDAO;
     }
-
-    // Get all messages for a specific user
-    public List<Message> getMessagesByUserId(int userId) {
-        return messageDAO.getMessagesByUserId(userId);
-    }
-
-    // Get all messages
-    public List<Message> getAllMessages() {
+    public List<Message> getAllMessages(){
         return messageDAO.getAllMessages();
     }
-
-    // Delete a message by ID
-    public boolean deleteMessage(int messageId) {
-        return messageDAO.deleteMessage(messageId);
+    public Message addMessage(Message message)
+    {   
+        if(message.getMessage_text().isBlank())
+        {
+            return null;
+        }
+        if(message.getMessage_text().length() >= 255)
+        {
+            return null;
+        }  
+        List<Account> accounts = accountDAO.getAllAccounts(); 
+        boolean result = false;
+        for(int i = 0; i < accounts.size(); i++)
+        {
+            if(accounts.get(i).getAccount_id() == message.getPosted_by())
+            {
+                result = true;
+            }
+        }
+        if(!result)
+        {
+            return null;
+        } 
+        Message addedmessage = messageDAO.insertMessage(message);
+        return addedmessage;
+    }
+    public Message getMessagebyID(int id)
+    {
+        Message message = messageDAO.getMessagebyID(id);
+        return message;
+    }
+    public Message deleteMessagebyID(int id)
+    {       
+        Message message = this.getMessagebyID(id);
+        if(message == null)
+        {
+            return null;
+        }        
+        messageDAO.deleteMessagebyID(id);        
+        return message;
+    }
+    public Message updateMessagebyID(int id, String message_text)
+    {       
+        Message message = this.getMessagebyID(id);
+        if(message == null)
+        {
+            return null;
+        }
+        if(message_text.isBlank())
+        {
+            return null;
+        }
+        if(message_text.length() >= 255)
+        {
+            return null;
+        }        
+        messageDAO.updateMessagebyID(id, message_text); 
+        message = this.getMessagebyID(id);       
+        return message;
+    }
+    public List<Message> getMessagebyUserID(int id)
+    {       
+        List<Message> message = messageDAO.getMessagebyUserID(id);                
+        return message;
     }
 }
