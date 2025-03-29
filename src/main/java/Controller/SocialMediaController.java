@@ -1,5 +1,8 @@
 package Controller;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import Model.Account;
 import Model.Message;
 import Service.AccountService;
@@ -95,12 +98,12 @@ public class SocialMediaController {
     }
 
     private void getMessageById(Context context) {
-        int messageId = Integer.parseInt(context.pathParam("id"));
-        Message message = messageService.getMessageById(messageId);
-        if (message != null) {
-            context.status(200).json(message);
+        int userId = Integer.parseInt(context.pathParam("userId"));
+        List<Message> messages = messageService.getMessagesByUserId(userId);
+        if (messages.isEmpty()) {
+            context.status(200).json(new ArrayList<>());  // Return empty array if no messages
         } else {
-            context.status(404).json("Message not found");
+        context.status(200).json(messages);  // Return the messages
         }
     }
 
